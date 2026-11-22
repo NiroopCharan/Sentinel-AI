@@ -1,0 +1,7 @@
+session_id,container,label,identity,source_ip,origin_known,start_hour,hour_simulated,origin_simulated,lineage,cmd_intervals,n_commands,scenario,recorded_at
+56-1791885239,sentinel-victim-pod,owner,demoUser,127.0.0.1,,9.883,0,0,su>bash>docker,0.028;0.012;80.661,4,,2026-10-13T15:33:53
+122-1791885608,sentinel-victim-pod,owner,demoUser,172.17.0.1,,10.0,0,0,sshd>bash>whoami,10.095;14.61;9.967;8.959,5,,2026-10-13T15:33:53
+171-1791885878,sentinel-victim-pod,owner,demoUser,172.17.0.1,,10.067,0,0,sshd>bash>ls,4.381;10.006;11.535;14.711,5,,2026-10-13T15:36:01
+221-1791886008,sentinel-victim-pod,owner,demoUser,172.17.0.1,,10.1,0,0,sshd>bash>date,11.226;4.181,3,,2026-10-13T15:38:28
+254-1791886046,sentinel-victim-pod,owner,demoUser,172.17.0.1,,10.117,0,0,sshd>bash>pwd,4.869;4.455;3.476,4,,2026-10-13T15:38:28
+291-1791886077,sentinel-victim-pod,owner,demoUser,172.17.0.1,,10.117,0,0,sshd>bash>whoami,1.099;3.373,3,,2026-10-13T15:38:28

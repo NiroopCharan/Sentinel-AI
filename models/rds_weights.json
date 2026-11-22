@@ -1,0 +1,28 @@
+{
+  "weights": {
+    "cpu_util": 0.5084301504767186,
+    "ram_util": 0.4915698495232814,
+    "net_io_rate": 0.0
+  },
+  "abs_corr": {
+    "cpu_util": 0.8136067075154338,
+    "ram_util": 0.7866262974559924,
+    "net_io_rate": 0.0
+  },
+  "n_rows": 655,
+  "n_benign": 243,
+  "benign_baseline": {
+    "cpu_util": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "ram_util": {
+      "mean": 0.04139423606263726,
+      "std": 0.005866270804078563
+    },
+    "net_io_rate": {
+      "mean": 0.0,
+      "std": 0.0
+    }
+  }
+}

@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+models/*.joblib
+models/*.json
+data/raw/*.txt
+data/forensics/*
+!data/forensics/.gitkeep
+data/demo_keys/
+data/weights_state.json
+data/weight_audit.jsonl
+*.enc

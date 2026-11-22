@@ -1,0 +1,35 @@
+# Custom Falco rules for Sentinel-AI, appended to /etc/falco/falco_rules.local.yaml.
+# These are in ADDITION to Falco's stock ruleset (which already covers "Read sensitive file untrusted",
+# "Terminal shell in container", etc. - see MITRE_RULE_MAP in forensics/forensic_snapshot.py).
+# Install:  sudo cp falco/sentinel_rules.yaml /etc/falco/falco_rules.local.yaml && sudo systemctl restart falco
+
+- rule: Suspicious network tool launched in container
+  desc: nmap/hydra/hping3/ncat launched inside a monitored container (recon or brute-force tooling)
+  condition: >
+    spawned_process and container and
+    proc.name in (nmap, hydra, hping3, ncat, nc, masscan, zmap)
+  output: >
+    Suspicious network tool launched (user=%user.name command=%proc.cmdline container=%container.name image=%container.image.repository)
+  priority: WARNING
+  tags: [sentinel-ai, network, discovery]
+
+- rule: Crypto miner process pattern in container
+  desc: a CPU-hog process matching common miner/stress-test binary names started in a container
+  condition: >
+    spawned_process and container and
+    proc.name in (xmrig, minerd, cpuminer, stress-ng, stress)
+  output: >
+    Possible resource-hijack process started (user=%user.name command=%proc.cmdline container=%container.name)
+  priority: WARNING
+  tags: [sentinel-ai, resource-hijack]
+
+- rule: Drop and execute new binary in container
+  desc: a binary written to a world-writable path was immediately executed
+  condition: >
+    spawned_process and container and
+    proc.pname in (bash, sh, curl, wget) and
+    fd.directory in (/tmp, /var/tmp, /dev/shm)
+  output: >
+    New binary dropped and executed from a temp directory (command=%proc.cmdline container=%container.name)
+  priority: ERROR
+  tags: [sentinel-ai, execution]

@@ -1,0 +1,13 @@
+#!/bin/bash
+# sshd ForceCommand: records session start (time, origin, parent process) then hands over to an audited shell.
+export SENTINEL_SESSION_ID="$$-$(date +%s)"
+export SENTINEL_CLIENT_IP="${SSH_CONNECTION%% *}"
+SENTINEL_PARENT="$(ps -o comm= -p "$PPID" 2>/dev/null | tr -d ' ')"
+export SENTINEL_PARENT="${SENTINEL_PARENT:-sshd}"
+printf '%s|START|%s|%s|%s|%s\n' "$(date +%s.%N)" "$SENTINEL_SESSION_ID" "$(id -un)" "$SENTINEL_CLIENT_IP" "$SENTINEL_PARENT" >> /var/log/sentinel_audit.log
+export BASH_ENV=/etc/sentinel_audit_rc
+if [ -n "$SSH_ORIGINAL_COMMAND" ]; then
+  exec bash -c "$SSH_ORIGINAL_COMMAND"
+else
+  exec bash --rcfile /etc/sentinel_audit_rc -i
+fi

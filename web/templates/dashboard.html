@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel-AI — Threat Operations</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<!-- Primary & Fallback Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+  if (typeof Chart === 'undefined') {
+    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"><\/script>');
+  }
+</script>
+
+<!-- Socket.IO Client -->
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+  if (typeof io === 'undefined') {
+    document.write('<script src="/socket.io/socket.io.js"><\/script>');
+  }
+</script>
+
+<style>
+:root{
+  --bg: #0a0e16;
+  --panel: #10141f;
+  --panel-raised: #141927;
+  --line: #212838;
+  --line-soft: #1a2030;
+  --text: #dbe2f0;
+  --muted: #6b7690;
+  --muted-2: #8a93ab;
+  --amber: #f2a93b;
+  --amber-dim: #8a6a2e;
+  --cyan: #3fd6c6;
+  --red: #e6534a;
+  --green: #4fae7a;
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  --sans: 'Space Grotesk', system-ui, sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-attachment: fixed;
+}
+.scanline{position:fixed;inset:0;pointer-events:none;z-index:50;
+  background:repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, transparent 1px, transparent 3px);
+}
+a{color:inherit}
+.mono{font-family:var(--mono)}
+.tick{letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:var(--muted)}
+
+/* ---------- top bar ---------- */
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 22px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg, rgba(16,20,31,.9), rgba(16,20,31,.6));
+  backdrop-filter:blur(6px);position:sticky;top:0;z-index:40;
+}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-mark{width:30px;height:30px;position:relative;flex:none}
+.brand-mark svg{width:100%;height:100%}
+.brand-name{font-weight:700;font-size:17px;letter-spacing:.01em}
+.brand-name span{color:var(--amber)}
+.brand-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.status-cluster{display:flex;align-items:center;gap:18px}
+.status-chip{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted-2)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.off{background:var(--muted);box-shadow:none}
+.dot.warn{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+.pill{font-size:11px;padding:3px 9px;border:1px solid var(--line);border-radius:3px;color:var(--muted-2)}
+
+/* ---------- layout ---------- */
+main{max-width:1440px;margin:0 auto;padding:22px;display:grid;grid-template-columns:340px 1fr 360px;gap:18px}
+@media (max-width:1180px){ main{grid-template-columns:1fr} }
+.col{display:flex;flex-direction:column;gap:18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+.panel-title{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-2);font-weight:600}
+.panel-body{padding:16px}
+
+/* ---------- gauge ---------- */
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;padding:22px 16px 8px}
+.gauge-num{font-family:var(--mono);font-weight:700;font-size:46px;line-height:1;margin-top:-108px}
+.gauge-tier{margin-top:10px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:600;padding:4px 12px;border-radius:2px;border:1px solid currentColor}
+.gauge-sub{margin-top:8px;font-size:11px;color:var(--muted)}
+
+/* ---------- vector bars ---------- */
+.vec-row{display:grid;grid-template-columns:34px 1fr 46px;align-items:center;gap:10px;margin-bottom:12px}
+.vec-row:last-child{margin-bottom:0}
+.vec-tag{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted-2)}
+.vec-track{height:7px;background:var(--line-soft);border-radius:4px;position:relative;overflow:hidden}
+.vec-fill{height:100%;border-radius:4px;transition:width .4s ease}
+.vec-val{font-family:var(--mono);font-size:12px;text-align:right;color:var(--muted-2)}
+.vec-none{font-size:10px;color:var(--muted);font-style:italic}
+
+/* ---------- weights ---------- */
+.w-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.w-cell{background:var(--panel-raised);border:1px solid var(--line);border-radius:4px;padding:10px 8px;text-align:center}
+.w-cell .n{font-family:var(--mono);font-size:18px;font-weight:700}
+.w-cell .l{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-top:2px}
+
+/* ---------- containers ---------- */
+.container-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid var(--line-soft)}
+.container-row:first-child{border-top:none;padding-top:0}
+.container-name{font-family:var(--mono);font-size:13px}
+.container-meta{font-size:10px;color:var(--muted)}
+
+/* ---------- chart ---------- */
+.chart-box{height:230px;padding:10px 14px 4px;position:relative}
+
+/* ---------- incident list ---------- */
+.inc-list{display:flex;flex-direction:column}
+.inc{border-top:1px solid var(--line-soft);padding:13px 16px;cursor:pointer;transition:background .15s}
+.inc:first-child{border-top:none}
+.inc:hover{background:var(--panel-raised)}
+.inc.selected{background:var(--panel-raised);box-shadow:inset 3px 0 0 var(--amber)}
+.inc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.inc-id{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.inc-tier{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:2px}
+.inc-container{font-size:13px;font-weight:600}
+.inc-meta{font-size:11px;color:var(--muted);margin-top:3px}
+.mitre-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.mitre-tag{font-family:var(--mono);font-size:10px;padding:2px 6px;border:1px solid var(--line);border-radius:2px;color:var(--muted-2)}
+.mitre-tag.heur{border-style:dashed;color:var(--muted)}
+.verify-chip{display:inline-flex;align-items:center;gap:5px;font-size:10px;margin-top:7px;font-weight:600}
+.verify-chip.ok{color:var(--green)}
+.verify-chip.bad{color:var(--red)}
+.verify-chip.pending{color:var(--muted)}
+
+/* ---------- detail / forensics ---------- */
+.detail-empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:12px}
+.action-log{font-family:var(--mono);font-size:11px;line-height:1.9;color:var(--muted-2);max-height:160px;overflow-y:auto}
+.action-log .t{color:var(--muted)}
+.snap-tabs{display:flex;gap:2px;margin-bottom:12px}
+.snap-tab{flex:1;text-align:center;padding:6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  background:var(--panel-raised);border:1px solid var(--line);cursor:pointer;color:var(--muted-2)}
+.snap-tab.active{color:var(--amber);border-color:var(--amber-dim)}
+.snap-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.snap-stat{background:var(--panel-raised);border:1px solid var(--line);padding:8px 10px;border-radius:3px}
+.snap-stat .n{font-family:var(--mono);font-weight:700;font-size:16px}
+.snap-stat .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.proc-list{font-family:var(--mono);font-size:11px;max-height:140px;overflow-y:auto}
+.proc-row{display:flex;justify-content:space-between;padding:3px 0;border-top:1px solid var(--line-soft)}
+.proc-row:first-child{border-top:none}
+.proc-row.sus{color:var(--red)}
+.empty-state{color:var(--muted);font-size:12px;padding:24px 16px;text-align:center}
+footer{max-width:1440px;margin:0 auto;padding:10px 22px 40px;color:var(--muted);font-size:11px;display:flex;justify-content:space-between}
+button.demo-btn{font-family:var(--mono);font-size:11px;background:var(--panel-raised);border:1px solid var(--line);
+  color:var(--muted-2);padding:5px 10px;border-radius:3px;cursor:pointer}
+button.demo-btn:hover{border-color:var(--amber-dim);color:var(--amber)}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="scanline"></div>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 32 32" fill="none">
+        <path d="M16 2 L28 8 V17 C28 24 22.5 28.5 16 30 C9.5 28.5 4 24 4 17 V8 Z" stroke="#f2a93b" stroke-width="1.6"/>
+        <path d="M11 16 L14.5 19.5 L21.5 12" stroke="#3fd6c6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div>
+      <div class="brand-name">SENTINEL<span>-AI</span></div>
+      <div class="brand-sub">Sense &middot; Reason &middot; Heal — HMR threat operations</div>
+    </div>
+  </div>
+  <div class="status-cluster">
+    <div class="status-chip"><span class="dot" id="conn-dot"></span><span id="conn-label">connecting</span></div>
+    <div class="status-chip"><span id="mode-dot" class="dot off"></span><span id="mode-label">—</span></div>
+    <div class="pill" id="models-pill">models: —</div>
+    <div class="pill" id="algo-pill" style="border-color:var(--cyan);color:var(--cyan)">algo: HMR + SPECTRA</div>
+    <button class="demo-btn" id="inject-benign">inject benign</button>
+    <button class="demo-btn" id="inject-attack">inject attack</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: gauge + vectors + weights -->
+  <div class="col">
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Threat Score</span><span class="tick" id="gauge-container">—</span></div>
+      <div class="gauge-wrap">
+        <canvas id="gauge" width="220" height="140"></canvas>
+        <div class="gauge-num" id="gauge-num">0.00</div>
+        <div class="gauge-tier" id="gauge-tier" style="color:var(--muted)">MONITOR</div>
+        <div class="gauge-sub" id="gauge-sub">τ 0.60 &nbsp;·&nbsp; margin 0.20</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">HMR Fusion Vectors</span></div>
+      <div class="panel-body" id="vectors"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">SPECTRA-CRBAC Engine</span><span class="tick" id="spectra-status">active</span></div>
+      <div class="panel-body">
+        <div class="vec-row">
+          <div class="vec-tag" style="color:var(--cyan)">RISK</div>
+          <div class="vec-track"><div class="vec-fill" id="spectra-fill" style="width:0%;background:var(--cyan)"></div></div>
+          <div class="vec-val" id="spectra-val"><span class="vec-none">n/a</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px">
+          <div class="w-cell" style="padding:6px 4px"><div class="n" id="sp-pthreat" style="font-size:13px;color:var(--amber)">—</div><div class="l" style="font-size:9px">Eng A: Threat</div></div>
+          <div class="w-cell" style="padding:6px 4px"><div class="n" id="sp-qano" style="font-size:13px;color:var(--cyan)">—</div><div class="l" style="font-size:9px">Eng B: Manifold</div></div>
+          <div class="w-cell" style="padding:6px 4px"><div class="n" id="sp-ev" style="font-size:13px;color:var(--green)">—</div><div class="l" style="font-size:9px">Eng C: CUSUM</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Adaptive Weights</span><span class="tick">live</span></div>
+      <div class="panel-body"><div class="w-grid" id="weights"></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Watched Containers</span></div>
+      <div class="panel-body" id="containers"><div class="empty-state">No telemetry yet.</div></div>
+    </div>
+  </div>
+
+  <!-- CENTER: timeline chart + incident list -->
+  <div class="col">
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Threat Score — Live</span><span class="tick" id="chart-rate">0 events</span></div>
+      <div class="chart-box"><canvas id="ts-chart"></canvas></div>
+    </div>
+
+    <div class="panel" style="flex:1">
+      <div class="panel-head"><span class="panel-title">Incident Timeline</span><span class="tick" id="inc-count">0 incidents</span></div>
+      <div class="inc-list" id="incidents"><div class="empty-state">No incidents recorded this session.</div></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: incident detail + forensics -->
+  <div class="col">
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Incident Detail</span></div>
+      <div class="panel-body" id="detail"><div class="detail-empty">Select an incident from the timeline.</div></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <span>HMR fusion &middot; RF / AS / RDS / ICS &middot; graduated response: Monitor → Log &amp; Watch → Isolate → Kill &amp; Restart</span>
+  <span id="footer-clock" class="mono">—</span>
+</footer>
+
+<script>
+const TIER_COLOR = {MONITOR:'#4fae7a', LOG_WATCH:'#3fd6c6', ISOLATE:'#f2a93b', KILL_RESTART:'#e6534a'};
+const TIER_LABEL = {MONITOR:'Monitor', LOG_WATCH:'Log & Watch', ISOLATE:'Isolate', KILL_RESTART:'Kill & Restart'};
+const VEC_COLOR = {rf:'#f2a93b', as:'#3fd6c6', rds:'#8f7ae6', ics:'#e6534a'};
+const VEC_LABEL = {rf:'RF', as:'AS', rds:'RDS', ics:'ICS'};
+
+let state = {weights:{rf:.4,as:.25,rds:.15,ics:.2}, tau:.6, margin:.2, history:[], incidents:[], isolated:[], dry_run:true};
+let selectedIncident = null, eventCount = 0;
+
+// ---------- gauge ----------
+const gaugeCanvas = document.getElementById('gauge');
+const gaugeCtx = gaugeCanvas.getContext('2d');
+function drawGauge(score, tierColor){
+  const c = gaugeCtx, w = 220, h = 140, cx = w/2, cy = 120, r = 95;
+  c.clearRect(0,0,w,h);
+  c.lineWidth = 14; c.lineCap = 'round';
+  c.strokeStyle = '#1a2030';
+  c.beginPath(); c.arc(cx,cy,r,Math.PI,2*Math.PI); c.stroke();
+
+  [state.tau/2, state.tau, Math.min(state.tau+state.margin,1)].forEach(t=>{
+    const a = Math.PI + t*Math.PI;
+    c.strokeStyle = '#2a3245'; c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(cx + Math.cos(a)*(r-9), cy + Math.sin(a)*(r-9));
+    c.lineTo(cx + Math.cos(a)*(r+9), cy + Math.sin(a)*(r+9));
+    c.stroke();
+  });
+
+  const frac = Math.max(0, Math.min(score,1));
+  c.lineWidth = 14; c.strokeStyle = tierColor;
+  c.beginPath(); c.arc(cx,cy,r,Math.PI,Math.PI + frac*Math.PI); c.stroke();
+
+  const a = Math.PI + frac*Math.PI;
+  c.strokeStyle = '#dbe2f0'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(cx,cy); c.lineTo(cx+Math.cos(a)*(r-20), cy+Math.sin(a)*(r-20)); c.stroke();
+  c.fillStyle = '#dbe2f0'; c.beginPath(); c.arc(cx,cy,4,0,2*Math.PI); c.fill();
+}
+drawGauge(0, TIER_COLOR.MONITOR);
+
+// ---------- timeseries chart ----------
+let tsChart = null;
+function initChart() {
+  if (typeof Chart === 'undefined') {
+    const box = document.querySelector('.chart-box');
+    if (box) box.innerHTML = '<div class="empty-state">Chart unavailable (Chart.js CDN did not load).</div>';
+    return;
+  }
+  const canvas = document.getElementById('ts-chart');
+  if (!canvas) return;
+  tsChart = new Chart(canvas, {
+    type: 'line',
+    data: { labels: [], datasets: [
+      {label:'Threat Score', data:[], borderColor:'#f2a93b', backgroundColor:'rgba(242,169,59,.08)', fill:true, tension:.25, pointRadius:0, borderWidth:2},
+      {label:'τ', data:[], borderColor:'#3fd6c6', borderDash:[4,3], pointRadius:0, borderWidth:1},
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:false,
+      scales:{
+        x:{ticks:{color:'#6b7690', maxTicksLimit:6, font:{family:'JetBrains Mono', size:9}}, grid:{color:'#1a2030'}},
+        y:{min:0, max:1, ticks:{color:'#6b7690', font:{family:'JetBrains Mono', size:9}}, grid:{color:'#1a2030'}},
+      },
+      plugins:{legend:{labels:{color:'#8a93ab', font:{size:10}}}}
+    }
+  });
+}
+initChart();
+
+function pushChart(ts, score, tau){
+  if (!tsChart) return;
+  const labels = tsChart.data.labels, d0 = tsChart.data.datasets[0].data, d1 = tsChart.data.datasets[1].data;
+  labels.push(new Date(ts*1000).toLocaleTimeString());
+  d0.push(score); d1.push(tau);
+  if(labels.length > 60){ labels.shift(); d0.shift(); d1.shift(); }
+  tsChart.update('none');
+}
+
+// ---------- vectors ----------
+function renderVectors(scores){
+  const el = document.getElementById('vectors'); el.innerHTML = '';
+  for(const v of ['rf','as','rds','ics']){
+    const val = (scores && scores[v] !== undefined && scores[v] !== null) ? Number(scores[v]) : null;
+    const row = document.createElement('div'); row.className = 'vec-row';
+    const pct = val == null ? 0 : Math.round(val * 100);
+    row.innerHTML = `
+      <div class="vec-tag">${VEC_LABEL[v]}</div>
+      <div class="vec-track"><div class="vec-fill" style="width:${pct}%;background:${VEC_COLOR[v]}"></div></div>
+      <div class="vec-val">${val == null ? '<span class=\"vec-none\">n/a</span>' : val.toFixed(2)}</div>`;
+    el.appendChild(row);
+  }
+}
+renderVectors(null);
+
+// ---------- spectra ----------
+function renderSpectra(sp){
+  const statusEl = document.getElementById('spectra-status');
+  const fillEl = document.getElementById('spectra-fill');
+  const valEl = document.getElementById('spectra-val');
+  if(!sp || !sp.active){
+    if(statusEl) { statusEl.textContent = 'idle'; statusEl.style.color = 'var(--muted)'; }
+    if(fillEl) fillEl.style.width = '0%';
+    if(valEl) valEl.innerHTML = '<span class="vec-none">n/a</span>';
+    document.getElementById('sp-pthreat').textContent = '—';
+    document.getElementById('sp-qano').textContent = '—';
+    document.getElementById('sp-ev').textContent = '—';
+    return;
+  }
+  const isAno = !!sp.is_anomalous;
+  if(statusEl){
+    statusEl.textContent = isAno ? 'ALERT' : 'CALM';
+    statusEl.style.color = isAno ? 'var(--red)' : 'var(--green)';
+  }
+  const pct = Math.round((sp.spectra_risk || 0) * 100);
+  if(fillEl){
+    fillEl.style.width = `${pct}%`;
+    fillEl.style.background = isAno ? 'var(--red)' : 'var(--cyan)';
+  }
+  if(valEl) valEl.textContent = Number(sp.spectra_risk || 0).toFixed(2);
+  document.getElementById('sp-pthreat').textContent = Number(sp.threat_prob || 0).toFixed(2);
+  document.getElementById('sp-qano').textContent = Number(sp.anomaly_quantile || 0).toFixed(2);
+  document.getElementById('sp-ev').textContent = Number(sp.evidence_score || 0).toFixed(2);
+}
+renderSpectra(null);
+
+// ---------- weights ----------
+function renderWeights(w){
+  const el = document.getElementById('weights'); el.innerHTML = '';
+  for(const v of ['rf','as','rds','ics']){
+    const cell = document.createElement('div'); cell.className='w-cell';
+    const val = (w && w[v] !== undefined) ? (w[v] * 100).toFixed(1) : '25.0';
+    cell.innerHTML = `<div class="n" style="color:${VEC_COLOR[v]}">${val}%</div><div class="l">${VEC_LABEL[v]}</div>`;
+    el.appendChild(cell);
+  }
+}
+renderWeights(state.weights);
+
+// ---------- containers ----------
+const containerState = {};
+function renderContainers(){
+  const el = document.getElementById('containers');
+  const names = Object.keys(containerState);
+  if(!names.length){ el.innerHTML = '<div class="empty-state">No telemetry yet.</div>'; return; }
+  el.innerHTML = '';
+  names.forEach(n=>{
+    const info = containerState[n];
+    const row = document.createElement('div'); row.className='container-row';
+    const color = TIER_COLOR[info.tier] || '#6b7690';
+    row.innerHTML = `<div><div class="container-name">${n}</div>
+        <div class="container-meta">score ${info.score.toFixed(2)} &middot; ${TIER_LABEL[info.tier]||info.tier}${state.isolated.includes(n)?' &middot; ISOLATED':''}</div></div>
+        <span class="dot" style="background:${color};box-shadow:0 0 7px ${color}"></span>`;
+    el.appendChild(row);
+  });
+}
+
+// ---------- incidents ----------
+function tierBadgeStyle(tier){
+  const c = TIER_COLOR[tier] || '#6b7690';
+  return `color:${c};border:1px solid ${c}55;background:${c}18`;
+}
+
+function renderIncidents(){
+  const el = document.getElementById('incidents');
+  document.getElementById('inc-count').textContent = `${state.incidents.length} incident${state.incidents.length===1?'':'s'}`;
+  if(!state.incidents.length){ el.innerHTML = '<div class="empty-state">No incidents recorded this session.</div>'; return; }
+  el.innerHTML = '';
+  state.incidents.forEach(inc=>{
+    const div = document.createElement('div');
+    div.className = 'inc' + (selectedIncident && selectedIncident.id===inc.id ? ' selected' : '');
+    const verified = inc.verified;
+    let verifyHtml = '';
+    if(inc.status==='healed' || inc.status==='heal_failed'){
+      verifyHtml = `<div class="verify-chip ${verified?'ok':'bad'}">${verified?'✓ VERIFIED CLEAN':'✗ VERIFICATION FAILED'}</div>`;
+    } else if(inc.status==='healing'){
+      verifyHtml = `<div class="verify-chip pending">◌ HEALING — VERIFYING…</div>`;
+    }
+    const tags = (inc.mitre||[]).slice(0,4).map(m=>`<span class="mitre-tag ${m.source==='vector-heuristic'?'heur':''}" title="${m.name||''} (${m.tactic||''})">${m.technique||m}</span>`).join('');
+    div.innerHTML = `
+      <div class="inc-top"><span class="inc-id">${inc.id}</span><span class="inc-tier" style="${tierBadgeStyle(inc.tier)}">${TIER_LABEL[inc.tier]||inc.tier}</span></div>
+      <div class="inc-container">${inc.container}</div>
+      <div class="inc-meta">peak TS ${inc.peak_score.toFixed(2)} &middot; ${new Date(inc.opened_at*1000).toLocaleTimeString()} &middot; ${inc.status}</div>
+      ${tags?`<div class="mitre-tags">${tags}</div>`:''}
+      ${verifyHtml}`;
+    div.onclick = () => selectIncident(inc.id);
+    el.appendChild(div);
+  });
+}
+
+function selectIncident(id){
+  selectedIncident = state.incidents.find(i=>i.id===id) || null;
+  if (selectedIncident) {
+    // Reflect selected incident's score and vectors on gauge & sidebar
+    const score = selectedIncident.peak_score || 0;
+    const tier = selectedIncident.tier || 'MONITOR';
+    const color = TIER_COLOR[tier] || '#6b7690';
+    document.getElementById('gauge-container').textContent = selectedIncident.container;
+    document.getElementById('gauge-num').textContent = score.toFixed(2);
+    const tierEl = document.getElementById('gauge-tier');
+    tierEl.textContent = TIER_LABEL[tier] || tier;
+    tierEl.style.color = color;
+    drawGauge(score, color);
+
+    if (selectedIncident.scores) {
+      renderVectors(selectedIncident.scores);
+    } else if (selectedIncident.peak_vectors) {
+      renderVectors(selectedIncident.peak_vectors);
+    }
+  }
+  renderIncidents();
+  renderDetail();
+}
+
+async function renderDetail(){
+  const el = document.getElementById('detail');
+  if(!selectedIncident){ el.innerHTML = '<div class="detail-empty">Select an incident from the timeline.</div>'; return; }
+  const inc = selectedIncident;
+  const actionsHtml = (inc.actions||[]).map(a=>`<div><span class="t">${new Date(a.t*1000).toLocaleTimeString()}</span> &nbsp;${a.action}${a.detail?' — '+esc(a.detail).slice(0,70):''}</div>`).join('');
+  el.innerHTML = `
+    <div style="margin-bottom:14px">
+      <div style="font-family:var(--mono);font-size:12px;color:var(--muted)">${inc.id}</div>
+      <div style="font-size:16px;font-weight:600;margin-top:2px">${inc.container}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">status: ${inc.status} &middot; peak TS ${inc.peak_score.toFixed(2)}</div>
+    </div>
+    <div class="snap-tabs">
+      <div class="snap-tab active" data-label="before">Before</div>
+      <div class="snap-tab" data-label="after">After</div>
+    </div>
+    <div id="snap-content"><div class="empty-state">Loading snapshot…</div></div>
+    <div style="margin-top:16px">
+      <div class="panel-title" style="margin-bottom:8px">Action Log</div>
+      <div class="action-log">${actionsHtml || '<span style="color:var(--muted)">no actions logged</span>'}</div>
+    </div>`;
+  el.querySelectorAll('.snap-tab').forEach(tab=>{
+    tab.onclick = () => { el.querySelectorAll('.snap-tab').forEach(t=>t.classList.remove('active')); tab.classList.add('active'); loadSnapshot(inc.id, tab.dataset.label); };
+  });
+  loadSnapshot(inc.id, 'before');
+}
+
+function esc(s){ return (s+'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+async function loadSnapshot(incidentId, label){
+  const box = document.getElementById('snap-content');
+  if(!box) return;
+  box.innerHTML = '<div class="empty-state">Loading snapshot…</div>';
+  try{
+    const r = await fetch(`/api/incidents/${incidentId}/snapshot/${label}`);
+    if(!r.ok){ box.innerHTML = `<div class="empty-state">No "${label}" snapshot captured for this incident (Triggered on KILL & RESTART).</div>`; return; }
+    const s = await r.json();
+    const procs = (s.processes||[]).map(p=>{
+      const sus = ['stress-ng','xmrig','nc','ncat','socat','hydra','nmap','minerd','cpuminer'].includes(p.name);
+      return `<div class="proc-row ${sus?'sus':''}"><span>${esc(p.name)||'?'} (${p.pid})</span><span>${esc(p.cmdline||'').slice(0,34)}</span></div>`;
+    }).join('') || '<div class="empty-state">no process data</div>';
+    box.innerHTML = `
+      <div class="snap-grid">
+        <div class="snap-stat"><div class="n">${s.process_count || 0}</div><div class="l">Processes</div></div>
+        <div class="snap-stat"><div class="n">${s.established || 0}</div><div class="l">Established conns</div></div>
+        <div class="snap-stat"><div class="n">${(s.fs_changes ? (s.fs_changes.changed + s.fs_changes.added + s.fs_changes.deleted) : 0)}</div><div class="l">FS changes</div></div>
+        <div class="snap-stat"><div class="n">${s.session_commands || 0}</div><div class="l">Session cmds</div></div>
+      </div>
+      <div class="panel-title" style="margin-bottom:6px">Process Table</div>
+      <div class="proc-list">${procs}</div>
+      <div style="margin-top:10px;font-size:10px;color:var(--muted)">artifact sha256: ${(s.artifact_sha256||'').slice(0,20)}… (encrypted; decrypt via forensics/forensic_snapshot.py)</div>`;
+  }catch(e){
+    box.innerHTML = `<div class="empty-state">No "${label}" snapshot captured for this incident.</div>`;
+  }
+}
+
+// ---------- socket wiring ----------
+try {
+  if (typeof io === 'undefined') throw new Error('socket.io client did not load');
+  const socket = io();
+  socket.on('connect', ()=>{
+    document.getElementById('conn-dot').className='dot';
+    document.getElementById('conn-label').textContent='live';
+  });
+  socket.on('disconnect', ()=>{
+    document.getElementById('conn-dot').className='dot off';
+    document.getElementById('conn-label').textContent='disconnected';
+  });
+
+  socket.on('telemetry', ev => {
+    eventCount++;
+    document.getElementById('chart-rate').textContent = `${eventCount} events`;
+    document.getElementById('gauge-container').textContent = ev.container;
+    document.getElementById('gauge-num').textContent = ev.score.toFixed(2);
+    const color = TIER_COLOR[ev.tier] || '#6b7690';
+    const tierEl = document.getElementById('gauge-tier');
+    tierEl.textContent = TIER_LABEL[ev.tier] || ev.tier;
+    tierEl.style.color = color;
+    drawGauge(ev.score, color);
+    renderVectors(ev.scores);
+    renderSpectra(ev.spectra);
+    if (ev.weights) { state.weights = ev.weights; renderWeights(ev.weights); }
+    if (ev.tau) { state.tau = ev.tau; }
+    if (ev.margin) { state.margin = ev.margin; }
+    document.getElementById('gauge-sub').textContent = `τ ${state.tau.toFixed(2)} · margin ${state.margin.toFixed(2)}`;
+    pushChart(ev.t, ev.score, state.tau);
+    containerState[ev.container] = {tier: ev.tier, score: ev.score};
+    renderContainers();
+  });
+
+  socket.on('incident', inc => {
+    const idx = state.incidents.findIndex(i=>i.id===inc.id);
+    if(idx>=0) state.incidents[idx] = inc; else state.incidents.unshift(inc);
+    if(selectedIncident && selectedIncident.id===inc.id) selectedIncident = inc;
+    renderIncidents();
+    if(selectedIncident && selectedIncident.id===inc.id) renderDetail();
+  });
+} catch (e) {
+  console.warn('Socket.IO init warning:', e);
+  document.getElementById('conn-dot').className = 'dot off';
+  document.getElementById('conn-label').textContent = 'live updates unavailable';
+}
+
+// ---------- initial state + demo buttons ----------
+async function loadState(){
+  try {
+    const r = await fetch('/api/state');
+    state = {...state, ...await r.json()};
+    document.getElementById('models-pill').textContent = `models: ${state.trained_on || 'real'} / ${state.feature_set || 'core'}`;
+    const algoPill = document.getElementById('algo-pill');
+    if(algoPill) {
+      algoPill.textContent = `algo: ${state.algorithm_mode || 'HYBRID'} ${state.spectra_active ? '(HMR + SPECTRA)' : '(HMR)'}`;
+    }
+    document.getElementById('mode-dot').className = 'dot ' + (state.dry_run ? 'warn' : '');
+    document.getElementById('mode-label').textContent = state.dry_run ? 'dry-run (no docker)' : 'live heal enabled';
+    renderWeights(state.weights);
+    renderIncidents();
+    renderContainers();
+    (state.history||[]).forEach(ev=>{
+      eventCount++;
+      pushChart(ev.t, ev.score, ev.tau);
+      containerState[ev.container] = {tier: ev.tier, score: ev.score};
+    });
+    document.getElementById('chart-rate').textContent = `${eventCount} events`;
+    renderContainers();
+
+    if(state.incidents && state.incidents.length > 0){
+      selectIncident(state.incidents[0].id);
+    }
+  } catch (e) {
+    console.error('Could not load /api/state:', e);
+    document.getElementById('models-pill').textContent = 'models: unreachable';
+  }
+}
+loadState();
+
+document.getElementById('inject-benign').onclick = () => fetch('/api/demo/inject', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({kind:'benign'})}).catch(e=>console.error(e));
+document.getElementById('inject-attack').onclick = () => fetch('/api/demo/inject', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({kind:'attack'})}).catch(e=>console.error(e));
+
+setInterval(()=>{ document.getElementById('footer-clock').textContent = new Date().toLocaleString(); }, 1000);
+</script>
+</body>
+</html>

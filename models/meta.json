@@ -1,0 +1,27 @@
+{
+  "trained_on": "real",
+  "feature_set": "core",
+  "seed": 42,
+  "as_min": 0.3573192913434183,
+  "as_max": 0.6814679832638441,
+  "tau": 0.48,
+  "margin": 0.2,
+  "tau_val_f1": 0.9799436863764349,
+  "tau_note": "F1-optimal on the held-out 20% of the TRAIN partition (RF+AS fusion only)",
+  "n_fit": 100778,
+  "n_val": 25195,
+  "class_balance_fit": {
+    "n": 100778,
+    "normal": 53874,
+    "attack": 46904,
+    "attack_fraction": 0.4654
+  },
+  "class_balance_val": {
+    "n": 25195,
+    "normal": 13469,
+    "attack": 11726,
+    "attack_fraction": 0.4654
+  },
+  "sklearn_version": "1.4.2",
+  "trained_at": "2026-10-14T10:40:43"
+}
